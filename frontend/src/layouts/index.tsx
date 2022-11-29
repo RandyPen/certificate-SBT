@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, Link, history } from 'umi'
+import { useWallet, ConnectModal } from '@suiet/wallet-kit'
 import sui from '@/assets/sui.png'
 const navigation = [
   { name: 'Home', href: '/' },
@@ -7,6 +8,10 @@ const navigation = [
 ]
 
 export default function Example() {
+  const wallet = useWallet()
+  const { connected } = wallet
+  const [showModal, setShowModal] = useState(false)
+  const [showDisconnected, setShowDisconnected] = useState(false)
   return (
     <div className="isolate bg-white">
       <div className="absolute inset-x-0 top-[-10rem] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[-20rem]">
@@ -63,13 +68,36 @@ export default function Example() {
                 </span>
               ))}
             </div>
-            <div className="hidden lg:flex lg:min-w-0 lg:flex-1 lg:justify-end">
-              <a
-                href="#"
-                className="inline-block rounded-lg px-3 py-1.5 text-sm font-semibold leading-6 text-gray-900 shadow-sm ring-1 ring-gray-900/10 hover:ring-gray-900/20"
-              >
-                Log in
-              </a>
+            <div className="flex min-w-0 flex-1 justify-end">
+              {connected ? (
+                <span
+                  onClick={() => setShowDisconnected(!showDisconnected)}
+                  className="relative cursor-default inline-block rounded-lg px-3 py-1.5 text-sm font-semibold leading-6 text-gray-900 shadow-sm ring-1 ring-gray-900/10 hover:ring-gray-900/20"
+                >
+                  {wallet.address}
+                  {showDisconnected ? (
+                    <span
+                      onClick={() => {
+                        wallet.disconnect()
+                      }}
+                      className="top-10 right-0 absolute cursor-default inline-block rounded-lg px-3 py-1.5 text-sm font-semibold leading-6 text-gray-900 shadow-sm ring-1 ring-gray-900/10 hover:ring-gray-900/20"
+                    >
+                      DisConnect
+                    </span>
+                  ) : (
+                    <></>
+                  )}
+                </span>
+              ) : (
+                <ConnectModal
+                  open={showModal}
+                  onOpenChange={(open) => setShowModal(open)}
+                >
+                  <span className="cursor-default inline-block rounded-lg px-3 py-1.5 text-sm font-semibold leading-6 text-gray-900 shadow-sm ring-1 ring-gray-900/10 hover:ring-gray-900/20">
+                    Log in
+                  </span>
+                </ConnectModal>
+              )}
             </div>
           </nav>
         </div>
