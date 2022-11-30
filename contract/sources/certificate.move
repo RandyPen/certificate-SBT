@@ -4,6 +4,7 @@ module certificate_sbt::certificate {
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
+    use sui::event;
 
     struct CertificateRecord has key {
         id: UID,
@@ -16,6 +17,20 @@ module certificate_sbt::certificate {
     struct CertificateReceived has key {
         id: UID,
         recordID: address,
+    }
+
+    // ====== Events ======
+
+    struct AwardCertification has copy, drop {
+        recordID: address,
+        from: address,
+        to: address
+    }
+
+    struct RevokeCertification has copy, drop {
+        recordID: address,
+        from: address,
+        to: address
     }
 
     const ENotGrantor: u64 = 1;
@@ -41,17 +56,21 @@ module certificate_sbt::certificate {
     }
 
     public entry fun award(recipient: address, description: vector<u8>, work: vector<u8>, ctx: &mut TxContext) {
+        let sender = tx_context::sender(ctx);
         let (recordID, certificate_record) = new_certification_record(recipient, description, work, ctx);
-        transfer::transfer(certificate_record, tx_context::sender(ctx));
-
         let certificate_received = new_certification_received(recordID, ctx);
+
+        event::emit(AwardCertification { recordID: recordID, from: sender, to: recipient });
+        transfer::transfer(certificate_record, sender);
         transfer::transfer(certificate_received, recipient);
     }
 
     public entry fun revoke_grant(certificate: CertificateRecord, ctx: &mut TxContext) {
         let sender = tx_context::sender(ctx);
         assert!(sender == grantor(&certificate), ENotGrantor);
-        let CertificateRecord { id, grantor: _, recipient: _, description: _, work: _ } = certificate;
+        let CertificateRecord { id, grantor, recipient, description: _, work: _ } = certificate;
+        let recordID: address = object::uid_to_address(&id);
+        event::emit(RevokeCertification { recordID: recordID, from: grantor, to: recipient });
         object::delete(id);
     }
 
