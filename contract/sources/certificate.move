@@ -1,6 +1,6 @@
 module certificate_sbt::certificate {
-    use std::string::{Self, String, utf8, try_utf8};
-    use std::option::{Self, Option};
+    use std::string::{Self, String};
+    use std::option::Option;
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
