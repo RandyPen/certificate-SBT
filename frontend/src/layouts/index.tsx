@@ -5,6 +5,7 @@ import sui from '@/assets/sui.png'
 const navigation = [
   { name: 'Home', href: '/' },
   { name: 'Search', href: '/search' },
+  { name: 'Upload', href: '/upload' },
 ]
 
 export default function Example() {

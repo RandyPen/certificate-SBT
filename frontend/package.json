@@ -14,8 +14,10 @@
     "@suiet/wallet-kit": "^0.1.10",
     "antd": "^5.0.1",
     "clsx": "^1.2.1",
+    "daisyui": "^2.50.1",
     "react-quill": "^2.0.0",
-    "umi": "^4.0.33"
+    "umi": "^4.0.33",
+    "web3.storage": "^4.4.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",

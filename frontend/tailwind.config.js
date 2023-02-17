@@ -4,4 +4,5 @@ module.exports = {
     './src/components/**.tsx',
     './src/layouts/**.tsx',
   ],
+  plugins: [require('daisyui')],
 }
