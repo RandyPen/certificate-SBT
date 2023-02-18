@@ -7,6 +7,7 @@ module certificate_sbt::certificate {
     use sui::event;
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
+    // use sui::url::{Self, Url};  TODO: After Sui url module support URL format validation
     use sui::sui::SUI;
 
     
@@ -25,24 +26,25 @@ module certificate_sbt::certificate {
         recipient: address,
         description: String,
         work: Option<String>,
+        url: Option<String>,
     }
 
     struct CertificateReceived has key {
         id: UID,
-        recordID: address,
+        SBTID: address,
     }
 
     // ======== Events =========
     struct TreasuryCreated has copy, drop { id: ID }
 
     struct AwardCertification has copy, drop {
-        recordID: address,
+        SBTID: address,
         from: address,
         to: address
     }
 
     struct RevokeCertification has copy, drop {
-        recordID: address,
+        SBTID: address,
         from: address,
         to: address
     }
@@ -74,7 +76,7 @@ module certificate_sbt::certificate {
         transfer::share_object(Treasury {
             id,
             balance: balance::zero<SUI>(),
-            fee: 100000,
+            fee: 1000000,
         })
     }
 
@@ -94,16 +96,20 @@ module certificate_sbt::certificate {
         self.work
     }
 
-    public fun certificationIDinReceived(self: &CertificateReceived): address {
-        self.recordID
+    public fun image_url(self: &CertificateRecord): Option<String> {
+        self.url
     }
 
-    public entry fun award(recipient: address, description: vector<u8>, work: vector<u8>, ctx: &mut TxContext) {
-        let sender = tx_context::sender(ctx);
-        let (recordID, certificate_record) = new_certification_record(recipient, description, work, ctx);
-        let certificate_received = new_certification_received(recordID, ctx);
+    public fun certificationIDinReceived(self: &CertificateReceived): address {
+        self.SBTID
+    }
 
-        event::emit(AwardCertification { recordID: recordID, from: sender, to: recipient });
+    public entry fun award(recipient: address, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
+        let sender = tx_context::sender(ctx);
+        let (sbtID, certificate_record) = new_certification_record(recipient, description, work, url, ctx);
+        let certificate_received = new_certification_received(sbtID, ctx);
+
+        event::emit(AwardCertification { SBTID: sbtID, from: sender, to: recipient });
         transfer::transfer(certificate_record, sender);
         transfer::transfer(certificate_received, recipient);
     }
@@ -117,9 +123,9 @@ module certificate_sbt::certificate {
         coin::put(treasury_balance, pay_coin);
         transfer::transfer(payment, sender);
 
-        let CertificateRecord { id, grantor, recipient, description: _, work: _ } = certificate;
-        let recordID: address = object::uid_to_address(&id);
-        event::emit(RevokeCertification { recordID: recordID, from: grantor, to: recipient });
+        let CertificateRecord { id, grantor, recipient, description: _, work: _ , url: _ } = certificate;
+        let sbtID: address = object::uid_to_address(&id);
+        event::emit(RevokeCertification { SBTID: sbtID, from: grantor, to: recipient });
         object::delete(id)
     }
 
@@ -154,10 +160,10 @@ module certificate_sbt::certificate {
     // ============== Constructors. These create new Sui objects. ==============
 
     fun new_certification_record(
-        recipient: address, description: vector<u8>, work: vector<u8>, ctx: &mut TxContext
+        recipient: address, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext
     ): (address, CertificateRecord) {
         let id = object::new(ctx);
-        let recordID: address = object::uid_to_address(&id);
+        let sbtID: address = object::uid_to_address(&id);
 
         let certificate_record = CertificateRecord {
             id,
@@ -165,16 +171,17 @@ module certificate_sbt::certificate {
             recipient,
             description: string::utf8(description),
             work: string::try_utf8(work),
+            url: string::try_utf8(url),
         };
-        (recordID, certificate_record)
+        (sbtID, certificate_record)
     }
 
     fun new_certification_received(
-        recordID: address, ctx: &mut TxContext
+        sbtID: address, ctx: &mut TxContext
     ): CertificateReceived {
         CertificateReceived {
             id: object::new(ctx),
-            recordID,
+            SBTID: sbtID,
         }
     }
 }
