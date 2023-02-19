@@ -24,7 +24,8 @@ module certificate_sbt::certificate {
         id: UID,
         grantor: address,
         recipient: address,
-        description: String,
+        title: String,
+        description: Option<String>,
         work: Option<String>,
         url: Option<String>,
     }
@@ -88,7 +89,11 @@ module certificate_sbt::certificate {
         self.grantor
     }
 
-    public fun description(self: &CertificateRecord): String {
+    public fun title(self: &CertificateRecord): String {
+        self.title
+    }
+
+    public fun description(self: &CertificateRecord): Option<String> {
         self.description
     }
 
@@ -104,9 +109,9 @@ module certificate_sbt::certificate {
         self.SBTID
     }
 
-    public entry fun award(recipient: address, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
+    public entry fun award(recipient: address, title: vector<u8>, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
         let sender = tx_context::sender(ctx);
-        let (sbtID, certificate_record) = new_certification_record(recipient, description, work, url, ctx);
+        let (sbtID, certificate_record) = new_certification_record(recipient, title, description, work, url, ctx);
         let certificate_received = new_certification_received(sbtID, ctx);
 
         event::emit(AwardCertification { SBTID: sbtID, from: sender, to: recipient });
@@ -123,7 +128,7 @@ module certificate_sbt::certificate {
         coin::put(treasury_balance, pay_coin);
         transfer::transfer(payment, sender);
 
-        let CertificateRecord { id, grantor, recipient, description: _, work: _ , url: _ } = certificate;
+        let CertificateRecord { id, grantor, recipient, title: _, description: _, work: _ , url: _ } = certificate;
         let sbtID: address = object::uid_to_address(&id);
         event::emit(RevokeCertification { SBTID: sbtID, from: grantor, to: recipient });
         object::delete(id)
@@ -160,7 +165,7 @@ module certificate_sbt::certificate {
     // ============== Constructors. These create new Sui objects. ==============
 
     fun new_certification_record(
-        recipient: address, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext
+        recipient: address, title: vector<u8>, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext
     ): (address, CertificateRecord) {
         let id = object::new(ctx);
         let sbtID: address = object::uid_to_address(&id);
@@ -169,7 +174,8 @@ module certificate_sbt::certificate {
             id,
             grantor: tx_context::sender(ctx),
             recipient,
-            description: string::utf8(description),
+            title: string::utf8(title),
+            description: string::try_utf8(description),
             work: string::try_utf8(work),
             url: string::try_utf8(url),
         };
