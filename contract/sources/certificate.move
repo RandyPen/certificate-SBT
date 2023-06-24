@@ -1,193 +1,169 @@
 module certificate_sbt::certificate {
     use std::string::{Self, String};
-    use std::option::Option;
+    use std::option::{Self, Option};
     use sui::object::{Self, UID, ID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     use sui::event;
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
-    // use sui::url::{Self, Url};  TODO: After Sui url module support URL format validation
+    use sui::table::{Self, Table};
     use sui::sui::SUI;
+    use sui::clock::{Self, Clock};
 
+    // ======== Constants =========
+    const VERSION: u64 = 1;
+    const ONE_HOUR_IN_MS: u64 = 3_600_000;
+    const ONE_YEAR_IN_MS: u64 = 31_536_000_000;
     
     // ======== Types =========
     struct AdminCap has key { id: UID }
 
-    struct Treasury has key, store {
+    struct Treasury has key {
         id: UID,
+        version: u64,
         balance: Balance<SUI>,
-        fee: u64,
+        penalty_fee: u64,
+        renew_fee: u64,
     }
 
-    struct CertificateRecord has key {
+    struct Archieves has key {
         id: UID,
-        grantor: address,
+        version: u64,
+        cabinet: Table<address, Files>,
+    }
+
+    struct Files has key, store {
+        id: UID,
+        file: Table<ID, u64>,
+    }
+
+    struct SoulBoundToken has key {
+        id: UID,
+        sender: address,
         recipient: address,
         title: String,
         description: Option<String>,
         work: Option<String>,
-        url: Option<String>,
-    }
-
-    struct CertificateReceived has key {
-        id: UID,
-        SBTID: address,
+        image_url: Option<String>,
+        thumbnail_url: Option<String>,
+        start_time: u64,
+        end_time: u64,
     }
 
     // ======== Events =========
-    struct TreasuryCreated has copy, drop { id: ID }
-
-    struct AwardCertification has copy, drop {
-        SBTID: address,
-        from: address,
-        to: address
-    }
-
-    struct RevokeCertification has copy, drop {
-        SBTID: address,
-        from: address,
-        to: address
-    }
-
     struct UpdateMistakeFee has copy, drop {
         fee: u64
     }
 
-    struct WithdrawFee has copy, drop {
+    struct UpdateReNewFee has copy, drop {
+        fee: u64
+    }
+
+    struct WithdrawAmount has copy, drop {
         amount: u64
     }
 
     // ======== Errors =========
-    const EWithdrawTooLarge: u64 = 0;
-
-    const ENotGrantor: u64 = 1;
-
-    const ENotEnoughPayment: u64 = 2;
+    const ENotEnough: u64 = 0;
+    const EInvalidTime: u64 = 1;
 
 
     // ======== Functions =========
 
     fun init(ctx: &mut TxContext) {
-        let id = object::new(ctx);
-
-        event::emit(TreasuryCreated { id: object::uid_to_inner(&id) });
-
-        transfer::transfer(AdminCap { id: object::new(ctx) }, tx_context::sender(ctx));
-        transfer::share_object(Treasury {
-            id,
+        let admin_cap = AdminCap { id: object::new(ctx) };
+        let treasury = Treasury {
+            id: object::new(ctx),
+            version: VERSION,
             balance: balance::zero<SUI>(),
-            fee: 1000000,
-        })
+            penalty_fee: 500_000_000,
+            renew_fee: 5_000_000,
+        };
+        let archieves = Archieves {
+            id: object::new(ctx),
+            version: VERSION,
+            cabinet: table::new(ctx),
+        };
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        transfer::share_object(treasury);
+        transfer::share_object(archieves);
     }
 
-    public fun certificationIDinRecord(self: &CertificateRecord): address {
-        object::uid_to_address(&self.id)
-    }
-
-    public fun grantor(self: &CertificateRecord): address {
-        self.grantor
-    }
-
-    public fun title(self: &CertificateRecord): String {
-        self.title
-    }
-
-    public fun description(self: &CertificateRecord): Option<String> {
-        self.description
-    }
-
-    public fun work(self: &CertificateRecord): Option<String> {
-        self.work
-    }
-
-    public fun image_url(self: &CertificateRecord): Option<String> {
-        self.url
-    }
-
-    public fun certificationIDinReceived(self: &CertificateReceived): address {
-        self.SBTID
-    }
-
-    public entry fun award(recipient: address, title: vector<u8>, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
-        let sender = tx_context::sender(ctx);
-        let (sbtID, certificate_record) = new_certification_record(recipient, title, description, work, url, ctx);
-        let certificate_received = new_certification_received(sbtID, ctx);
-
-        event::emit(AwardCertification { SBTID: sbtID, from: sender, to: recipient });
-        transfer::transfer(certificate_record, sender);
-        transfer::transfer(certificate_received, recipient);
-    }
-
-    public entry fun revoke_grant(certificate: CertificateRecord, treasury: &mut Treasury, payment: Coin<SUI>, ctx: &mut TxContext) {
-        let sender = tx_context::sender(ctx);
-        assert!(sender == grantor(&certificate), ENotGrantor);
-        let treasury_balance = &mut treasury.balance;
-        let payment_mut = &mut payment;
-        let pay_coin = coin::split(payment_mut, treasury.fee, ctx);     // contains ENotEnoughPayment assert
-        coin::put(treasury_balance, pay_coin);
-        transfer::transfer(payment, sender);
-
-        let CertificateRecord { id, grantor, recipient, title: _, description: _, work: _ , url: _ } = certificate;
-        let sbtID: address = object::uid_to_address(&id);
-        event::emit(RevokeCertification { SBTID: sbtID, from: grantor, to: recipient });
-        object::delete(id)
+    public entry fun mint(
+        archieves: &mut Archieves,
+        _recipient: address,
+        _title: vector<u8>,
+        _description: vector<u8>,
+        _work: vector<u8>,
+        _image_url: vector<u8>,
+        _thumbnail_url: vector<u8>,
+        _clk: &Clock,
+        _effective_time: u64,
+        ctx: &mut TxContext
+    ) {
+        let sender: address = tx_context::sender(ctx);
+        if (!table::contains<address, Files>(&archieves.cabinet, sender)) {
+            let files = Files { id: object::new(ctx), file: table::new<ID, u64>(ctx) };
+            table::add(&mut archieves.cabinet, sender, files);
+        }
     }
 
     // === Admin-only functionality ===
-    public entry fun update_mistake_fee(
-        self: &mut Treasury, _: &AdminCap, mistake_fee: u64
+    public entry fun update_penalty_fee(
+        treasury: &mut Treasury, _: &AdminCap, penalty_fee: u64
     ) {
-        event::emit(UpdateMistakeFee { fee: mistake_fee });
-        self.fee = mistake_fee
+        event::emit(UpdateMistakeFee { fee: penalty_fee });
+        treasury.penalty_fee = penalty_fee
+    }
+
+    public entry fun update_renew_fee(
+        treasury: &mut Treasury, _: &AdminCap, renew_fee: u64
+    ) {
+        event::emit(UpdateReNewFee { fee: renew_fee });
+        treasury.renew_fee = renew_fee
     }
 
     public entry fun withdraw(
-        self: &mut Treasury, _: &AdminCap, amount: u64, ctx: &mut TxContext
+        treasury: &mut Treasury, _: &AdminCap, amount: Option<u64>, ctx: &mut TxContext
     ) {
-        let treasury_balance = &mut self.balance;
-        assert!(balance::value(treasury_balance) >= amount, EWithdrawTooLarge);
-        let withdraw_coin = coin::take(treasury_balance, amount, ctx);
-        event::emit(WithdrawFee { amount: amount});
-        transfer::transfer(withdraw_coin, tx_context::sender(ctx))
-    }
-
-    public entry fun withdraw_all(
-        self: &mut Treasury, _: &AdminCap, ctx: &mut TxContext
-    ) {
-        let treasury_balance = &mut self.balance;
-        let amount: u64 = balance::value(treasury_balance);
-        let withdraw_coin = coin::take(treasury_balance, amount, ctx);
-        event::emit(WithdrawFee { amount: amount});
-        transfer::transfer(withdraw_coin, tx_context::sender(ctx))
+        let amount = if (option::is_some(&amount)) {
+            let amt = option::destroy_some(amount);
+            assert!(amt <= balance::value(&treasury.balance), ENotEnough);
+            amt
+        } else {
+            balance::value(&treasury.balance)
+        };
+        let withdraw_coin: Coin<SUI> = coin::take(&mut treasury.balance, amount, ctx);
+        event::emit(WithdrawAmount { amount: amount});
+        transfer::public_transfer(withdraw_coin, tx_context::sender(ctx))
     }
 
     // ============== Constructors. These create new Sui objects. ==============
-
-    fun new_certification_record(
-        recipient: address, title: vector<u8>, description: vector<u8>, work: vector<u8>, url: vector<u8>, ctx: &mut TxContext
-    ): (address, CertificateRecord) {
-        let id = object::new(ctx);
-        let sbtID: address = object::uid_to_address(&id);
-
-        let certificate_record = CertificateRecord {
-            id,
-            grantor: tx_context::sender(ctx),
+    fun new_sbt(
+        recipient: address,
+        title: vector<u8>,
+        description: vector<u8>,
+        work: vector<u8>,
+        image_url: vector<u8>,
+        thumbnail_url: vector<u8>,
+        clk: &Clock,
+        effective_time: u64,
+        ctx: &mut TxContext
+        ): SoulBoundToken {
+        assert!(0 < effective_time && effective_time <= ONE_YEAR_IN_MS, EInvalidTime);
+        SoulBoundToken {
+            id: object::new(ctx),
+            sender: tx_context::sender(ctx),
             recipient,
             title: string::utf8(title),
             description: string::try_utf8(description),
             work: string::try_utf8(work),
-            url: string::try_utf8(url),
-        };
-        (sbtID, certificate_record)
-    }
-
-    fun new_certification_received(
-        sbtID: address, ctx: &mut TxContext
-    ): CertificateReceived {
-        CertificateReceived {
-            id: object::new(ctx),
-            SBTID: sbtID,
+            image_url: string::try_utf8(image_url),
+            thumbnail_url: string::try_utf8(thumbnail_url),
+            start_time: clock::timestamp_ms(clk),
+            end_time: clock::timestamp_ms(clk) + effective_time,
         }
     }
+
 }

@@ -4,8 +4,10 @@ version = "0.0.1"
 authors = ["RandyPen", "KT"]
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 [addresses]
 certificate_sbt =  "0x0"
-sui =  "0000000000000000000000000000000000000002"
+std = "0x1"
+sui =  "0x2"
+
