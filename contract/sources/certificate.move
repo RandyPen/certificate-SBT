@@ -14,6 +14,7 @@ module certificate_sbt::certificate {
     // ======== Constants =========
     const VERSION: u64 = 1;
     const ONE_HOUR_IN_MS: u64 = 3_600_000;
+    const NINETY_DAYS_IN_MS: u64 = 7_776_000_000;
     const ONE_YEAR_IN_MS: u64 = 31_536_000_000;
     
     // ======== Types =========
@@ -25,6 +26,7 @@ module certificate_sbt::certificate {
         balance: Balance<SUI>,
         penalty_fee: u64,
         renew_fee: u64,
+        mint_fee: u64,
     }
 
     struct Archieves has key {
@@ -33,7 +35,7 @@ module certificate_sbt::certificate {
         cabinet: Table<address, Files>,
     }
 
-    struct Files has key, store {
+    struct Files has store {
         id: UID,
         file: Table<ID, u64>,
     }
@@ -52,11 +54,21 @@ module certificate_sbt::certificate {
     }
 
     // ======== Events =========
+    struct MintSBT has copy, drop {
+        from: address,
+        to: address,
+        sbt_id: ID,
+    }
+
     struct UpdateMistakeFee has copy, drop {
         fee: u64
     }
 
     struct UpdateReNewFee has copy, drop {
+        fee: u64
+    }
+
+    struct UpdateMintFee has copy, drop {
         fee: u64
     }
 
@@ -77,8 +89,9 @@ module certificate_sbt::certificate {
             id: object::new(ctx),
             version: VERSION,
             balance: balance::zero<SUI>(),
-            penalty_fee: 500_000_000,
-            renew_fee: 5_000_000,
+            penalty_fee: 50_000_000,
+            renew_fee: 500_000,
+            mint_fee: 500_000,
         };
         let archieves = Archieves {
             id: object::new(ctx),
@@ -92,21 +105,43 @@ module certificate_sbt::certificate {
 
     public entry fun mint(
         archieves: &mut Archieves,
-        _recipient: address,
-        _title: vector<u8>,
-        _description: vector<u8>,
-        _work: vector<u8>,
-        _image_url: vector<u8>,
-        _thumbnail_url: vector<u8>,
-        _clk: &Clock,
-        _effective_time: u64,
+        treasury: &mut Treasury,
+        fee: &mut Coin<SUI>,
+        recipient: address,
+        title: vector<u8>,
+        description: vector<u8>,
+        work: vector<u8>,
+        image_url: vector<u8>,
+        thumbnail_url: vector<u8>,
+        clk: &Clock,
+        effective_time: Option<u64>,
         ctx: &mut TxContext
     ) {
         let sender: address = tx_context::sender(ctx);
         if (!table::contains<address, Files>(&archieves.cabinet, sender)) {
             let files = Files { id: object::new(ctx), file: table::new<ID, u64>(ctx) };
             table::add(&mut archieves.cabinet, sender, files);
-        }
+        };
+
+        let fee_coin: Coin<SUI> = coin::split(fee, treasury.mint_fee, ctx);
+        coin::put(&mut treasury.balance, fee_coin);
+
+        let effective_time: u64 = if (option::is_some(&effective_time)) {
+            let ef_time = option::destroy_some(effective_time);
+            assert!(0 < ef_time && ef_time <= ONE_YEAR_IN_MS, EInvalidTime);
+            ef_time
+        } else {
+            NINETY_DAYS_IN_MS
+        };
+
+        let sbt: SoulBoundToken = new_sbt(recipient, title, description, work, image_url, thumbnail_url,clk, effective_time, ctx);
+
+        let sbt_id: ID = object::id(&sbt);
+        let files: &mut Files = table::borrow_mut(&mut archieves.cabinet, sender);
+        table::add(&mut files.file, sbt_id, effective_time);
+
+        event::emit(MintSBT{ from: sender, to: recipient, sbt_id: sbt_id });
+        transfer::transfer(sbt, recipient);
     }
 
     // === Admin-only functionality ===
@@ -122,6 +157,13 @@ module certificate_sbt::certificate {
     ) {
         event::emit(UpdateReNewFee { fee: renew_fee });
         treasury.renew_fee = renew_fee
+    }
+
+    public entry fun update_mint_fee(
+        treasury: &mut Treasury, _: &AdminCap, mint_fee: u64
+    ) {
+        event::emit(UpdateMintFee { fee: mint_fee });
+        treasury.mint_fee = mint_fee
     }
 
     public entry fun withdraw(
@@ -151,7 +193,6 @@ module certificate_sbt::certificate {
         effective_time: u64,
         ctx: &mut TxContext
         ): SoulBoundToken {
-        assert!(0 < effective_time && effective_time <= ONE_YEAR_IN_MS, EInvalidTime);
         SoulBoundToken {
             id: object::new(ctx),
             sender: tx_context::sender(ctx),
