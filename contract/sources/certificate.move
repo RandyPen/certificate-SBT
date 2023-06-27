@@ -92,6 +92,9 @@ module certificate_sbt::certificate {
     const ENotEnough: u64 = 0;
     const EInvalidTime: u64 = 1;
     const EInvalidSBT: u64 = 2;
+    const EInvalidSBTID: u64 = 3;
+    const EInvalidSender: u64 = 4;
+    const EAlreadyRevoke: u64 = 5;
 
 
     // ======== Functions =========
@@ -175,6 +178,29 @@ module certificate_sbt::certificate {
 
         sbt.end_time = clock::timestamp_ms(clk) + effective_time;
         event::emit(RenewSBT{ sbt_id: object::id(sbt) });
+    }
+
+    public entry fun revoke(
+        archieves: &mut Archieves,
+        treasury: &mut Treasury,
+        fee: &mut Coin<SUI>,
+        sbt_id: ID,
+        ctx: &mut TxContext
+    ) {
+        let sender: address = tx_context::sender(ctx);
+        assert!(table::contains<address, Files>(&archieves.cabinet, sender), EInvalidSender);
+
+        let files: &mut Files = table::borrow_mut(&mut archieves.cabinet, sender);
+        assert!(table::contains<ID, u64>(&files.file, sbt_id), EInvalidSBTID);
+
+        let effective_time: &mut u64 = table::borrow_mut(&mut files.file, sbt_id);
+        assert!(*effective_time > 0, EAlreadyRevoke);
+
+        let fee_coin: Coin<SUI> = coin::split(fee, treasury.penalty_fee, ctx);
+        coin::put(&mut treasury.balance, fee_coin);
+
+        *effective_time = 0;
+        event::emit(RevokeSBT{ sbt_id: sbt_id });
     }
 
     // ======== SBT Getter Functions =========
