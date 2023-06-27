@@ -1,5 +1,5 @@
 module certificate_sbt::certificate {
-    use std::string::{Self, String};
+    use std::string::{Self, utf8, String};
     use std::option::{Self, Option};
     use sui::object::{Self, UID, ID};
     use sui::transfer;
@@ -10,6 +10,8 @@ module certificate_sbt::certificate {
     use sui::table::{Self, Table};
     use sui::sui::SUI;
     use sui::clock::{Self, Clock};
+    use sui::package;
+    use sui::display;
 
     // ======== Constants =========
     const VERSION: u64 = 1;
@@ -52,6 +54,9 @@ module certificate_sbt::certificate {
         start_time: u64,
         end_time: u64,
     }
+
+    /// One-Time-Witness for the module.
+    struct CERTIFICATE has drop {}
 
     // ======== Events =========
     struct MintSBT has copy, drop {
@@ -99,7 +104,7 @@ module certificate_sbt::certificate {
 
     // ======== Functions =========
 
-    fun init(ctx: &mut TxContext) {
+    fun init(otw: CERTIFICATE, ctx: &mut TxContext) {
         let admin_cap = AdminCap { id: object::new(ctx) };
         let treasury = Treasury {
             id: object::new(ctx),
@@ -114,7 +119,30 @@ module certificate_sbt::certificate {
             version: VERSION,
             cabinet: table::new(ctx),
         };
+
+        let keys = vector[
+            utf8(b"title"),
+            utf8(b"description"),
+            utf8(b"work"),
+            utf8(b"image_url"),
+            utf8(b"thumbnail_url"),
+        ];
+        let values = vector[
+            utf8(b"{title}"),
+            utf8(b"{description}"),
+            utf8(b"{work}"),
+            utf8(b"{image_url}"),
+            utf8(b"{thumbnail_url}"),
+        ];
+        let publisher = package::claim(otw, ctx);
+        let display = display::new_with_fields<SoulBoundToken>(
+            &publisher, keys, values, ctx
+        );
+        display::update_version(&mut display);
+
         transfer::transfer(admin_cap, tx_context::sender(ctx));
+        transfer::public_transfer(publisher, tx_context::sender(ctx));
+        transfer::public_transfer(display, tx_context::sender(ctx));
         transfer::share_object(treasury);
         transfer::share_object(archieves);
     }
