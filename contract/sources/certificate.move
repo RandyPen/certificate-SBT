@@ -24,7 +24,7 @@ module certificate_sbt::certificate {
         id: UID,
         version: u64,
         balance: Balance<SUI>,
-        penalty_fee: u64,
+        revoke_fee: u64,
         renew_fee: u64,
         mint_fee: u64,
     }
@@ -72,7 +72,7 @@ module certificate_sbt::certificate {
         sbt_id: ID,
     }
 
-    struct UpdateMistakeFee has copy, drop {
+    struct UpdateRevokeFee has copy, drop {
         fee: u64
     }
 
@@ -97,7 +97,6 @@ module certificate_sbt::certificate {
     const EAlreadyRevoke: u64 = 5;
     const EBurnValidSBT: u64 = 6;
 
-
     // ======== Functions =========
 
     fun init(ctx: &mut TxContext) {
@@ -106,7 +105,7 @@ module certificate_sbt::certificate {
             id: object::new(ctx),
             version: VERSION,
             balance: balance::zero<SUI>(),
-            penalty_fee: 50_000_000,
+            revoke_fee: 50_000_000,
             renew_fee: 500_000,
             mint_fee: 500_000,
         };
@@ -197,7 +196,7 @@ module certificate_sbt::certificate {
         let effective_time: &mut u64 = table::borrow_mut(&mut files.file, sbt_id);
         assert!(*effective_time > 0, EAlreadyRevoke);
 
-        let fee_coin: Coin<SUI> = coin::split(fee, treasury.penalty_fee, ctx);
+        let fee_coin: Coin<SUI> = coin::split(fee, treasury.revoke_fee, ctx);
         coin::put(&mut treasury.balance, fee_coin);
 
         *effective_time = 0;
@@ -219,13 +218,40 @@ module certificate_sbt::certificate {
     }
 
     // ======== SBT Getter Functions =========
+    public fun sender(sbt: &SoulBoundToken): address {
+        sbt.sender
+    }
+
+    public fun recipient(sbt: &SoulBoundToken): address {
+        sbt.recipient
+    }
+
+    public fun title(sbt: &SoulBoundToken): String {
+        sbt.title
+    }
+
+    public fun description(sbt: &SoulBoundToken): Option<String> {
+        sbt.description
+    }
+
+    public fun work(sbt: &SoulBoundToken): Option<String> {
+        sbt.work
+    }
+
+    public fun start_time(sbt: &SoulBoundToken): u64 {
+        sbt.start_time
+    }
+
+    public fun end_time(sbt: &SoulBoundToken): u64 {
+        sbt.end_time
+    }
 
     // === Admin-only functionality ===
-    public entry fun update_penalty_fee(
-        treasury: &mut Treasury, _: &AdminCap, penalty_fee: u64
+    public entry fun update_revoke_fee(
+        treasury: &mut Treasury, _: &AdminCap, revoke_fee: u64
     ) {
-        event::emit(UpdateMistakeFee { fee: penalty_fee });
-        treasury.penalty_fee = penalty_fee
+        event::emit(UpdateRevokeFee { fee: revoke_fee });
+        treasury.revoke_fee = revoke_fee
     }
 
     public entry fun update_renew_fee(
