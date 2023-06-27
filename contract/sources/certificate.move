@@ -60,6 +60,18 @@ module certificate_sbt::certificate {
         sbt_id: ID,
     }
 
+    struct RenewSBT has copy, drop {
+        sbt_id: ID,
+    }
+
+    struct RevokeSBT has copy, drop {
+        sbt_id: ID,
+    }
+
+    struct BurnSBT has copy, drop {
+        sbt_id: ID,
+    }
+
     struct UpdateMistakeFee has copy, drop {
         fee: u64
     }
@@ -79,6 +91,7 @@ module certificate_sbt::certificate {
     // ======== Errors =========
     const ENotEnough: u64 = 0;
     const EInvalidTime: u64 = 1;
+    const EInvalidSBT: u64 = 2;
 
 
     // ======== Functions =========
@@ -103,6 +116,7 @@ module certificate_sbt::certificate {
         transfer::share_object(archieves);
     }
 
+    // ======== SBT Manipulate Functions =========
     public entry fun mint(
         archieves: &mut Archieves,
         treasury: &mut Treasury,
@@ -143,6 +157,27 @@ module certificate_sbt::certificate {
         event::emit(MintSBT{ from: sender, to: recipient, sbt_id: sbt_id });
         transfer::transfer(sbt, recipient);
     }
+
+    public entry fun renew(
+        archieves: &Archieves,
+        treasury: &mut Treasury,
+        fee: &mut Coin<SUI>,
+        sbt: &mut SoulBoundToken,
+        clk: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let files: &Files = table::borrow(&archieves.cabinet, sbt.sender);
+        let effective_time: u64 = *table::borrow(&files.file, object::id(sbt));
+        assert!(effective_time > 0, EInvalidSBT);
+
+        let fee_coin: Coin<SUI> = coin::split(fee, treasury.renew_fee, ctx);
+        coin::put(&mut treasury.balance, fee_coin);
+
+        sbt.end_time = clock::timestamp_ms(clk) + effective_time;
+        event::emit(RenewSBT{ sbt_id: object::id(sbt) });
+    }
+
+    // ======== SBT Getter Functions =========
 
     // === Admin-only functionality ===
     public entry fun update_penalty_fee(
