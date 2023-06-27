@@ -95,6 +95,7 @@ module certificate_sbt::certificate {
     const EInvalidSBTID: u64 = 3;
     const EInvalidSender: u64 = 4;
     const EAlreadyRevoke: u64 = 5;
+    const EBurnValidSBT: u64 = 6;
 
 
     // ======== Functions =========
@@ -201,6 +202,20 @@ module certificate_sbt::certificate {
 
         *effective_time = 0;
         event::emit(RevokeSBT{ sbt_id: sbt_id });
+    }
+
+    public entry fun burn(
+        archieves: &mut Archieves,
+        sbt: SoulBoundToken
+    ) {
+        let SoulBoundToken { id, sender, recipient: _, title: _, description: _, work: _, image_url: _, thumbnail_url: _, start_time: _, end_time: _ } = sbt;
+        let files: &mut Files = table::borrow_mut(&mut archieves.cabinet, sender);
+        let sbt_id: ID = object::uid_to_inner(&id);
+        let effective_time: &u64 = table::borrow(&files.file, sbt_id);
+        assert!(*effective_time == 0, EBurnValidSBT);
+        let _ = table::remove(&mut files.file, sbt_id);
+        object::delete(id);
+        event::emit(BurnSBT { sbt_id: sbt_id });
     }
 
     // ======== SBT Getter Functions =========
